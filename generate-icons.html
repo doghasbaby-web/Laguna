@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generate Icons</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      margin: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin: 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Icon Generator for Action Recorder & Player</h1>
+  <p>Click the buttons below to download the icons</p>
+
+  <div>
+    <canvas id="canvas16" width="16" height="16"></canvas>
+    <canvas id="canvas48" width="48" height="48"></canvas>
+    <canvas id="canvas128" width="128" height="128"></canvas>
+  </div>
+
+  <div>
+    <button onclick="downloadIcon(16)">Download 16x16</button>
+    <button onclick="downloadIcon(48)">Download 48x48</button>
+    <button onclick="downloadIcon(128)">Download 128x128</button>
+  </div>
+
+  <script>
+    function drawIcon(canvas) {
+      const ctx = canvas.getContext('2d');
+      const size = canvas.width;
+
+      // Clear canvas
+      ctx.clearRect(0, 0, size, size);
+
+      // Create gradient background
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#667eea');
+      gradient.addColorStop(1, '#764ba2');
+
+      // Draw rounded rectangle
+      const radius = size * 0.2;
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.roundRect(0, 0, size, size, radius);
+      ctx.fill();
+
+      // Draw three dots with arrows
+      const centerX = size / 2;
+      const dotRadius = size * 0.06;
+      const spacing = size * 0.2;
+
+      ctx.fillStyle = 'white';
+
+      // Three dots
+      [0, 1, 2].forEach(i => {
+        const y = centerX + (i - 1) * spacing;
+        ctx.beginPath();
+        ctx.arc(centerX - spacing, y, dotRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Arrow
+        const arrowX = centerX + spacing * 0.5;
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = size * 0.02;
+        ctx.lineCap = 'round';
+
+        ctx.beginPath();
+        ctx.moveTo(centerX, y);
+        ctx.lineTo(arrowX, y);
+        ctx.stroke();
+
+        // Arrow head
+        const headSize = size * 0.04;
+        ctx.beginPath();
+        ctx.moveTo(arrowX - headSize, y - headSize);
+        ctx.lineTo(arrowX, y);
+        ctx.lineTo(arrowX - headSize, y + headSize);
+        ctx.stroke();
+      });
+
+      // Corner brackets
+      const cornerSize = size * 0.08;
+      const cornerOffset = size * 0.1;
+      ctx.strokeStyle = '#48bb78';
+      ctx.lineWidth = size * 0.025;
+
+      // Top-left
+      ctx.beginPath();
+      ctx.moveTo(cornerOffset + cornerSize, cornerOffset);
+      ctx.lineTo(cornerOffset, cornerOffset);
+      ctx.lineTo(cornerOffset, cornerOffset + cornerSize);
+      ctx.stroke();
+
+      // Top-right
+      ctx.beginPath();
+      ctx.moveTo(size - cornerOffset - cornerSize, cornerOffset);
+      ctx.lineTo(size - cornerOffset, cornerOffset);
+      ctx.lineTo(size - cornerOffset, cornerOffset + cornerSize);
+      ctx.stroke();
+
+      // Bottom-left
+      ctx.beginPath();
+      ctx.moveTo(cornerOffset, size - cornerOffset - cornerSize);
+      ctx.lineTo(cornerOffset, size - cornerOffset);
+      ctx.lineTo(cornerOffset + cornerSize, size - cornerOffset);
+      ctx.stroke();
+
+      // Bottom-right
+      ctx.beginPath();
+      ctx.moveTo(size - cornerOffset, size - cornerOffset - cornerSize);
+      ctx.lineTo(size - cornerOffset, size - cornerOffset);
+      ctx.lineTo(size - cornerOffset - cornerSize, size - cornerOffset);
+      ctx.stroke();
+    }
+
+    function downloadIcon(size) {
+      const canvas = document.getElementById(`canvas${size}`);
+      const link = document.createElement('a');
+      link.download = `icon${size}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    // Draw icons on page load
+    window.onload = () => {
+      drawIcon(document.getElementById('canvas16'));
+      drawIcon(document.getElementById('canvas48'));
+      drawIcon(document.getElementById('canvas128'));
+    };
+  </script>
+</body>
+</html>

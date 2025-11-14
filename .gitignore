@@ -1,0 +1,32 @@
+# Downloaded action files
+actions.json
+*.json.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.log
+
+# Node modules (if adding build tools later)
+node_modules/
+package-lock.json
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Chrome extension packaging
+*.crx
+*.pem
+*.zip

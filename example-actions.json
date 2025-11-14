@@ -1,0 +1,136 @@
+{
+  "metadata": {
+    "createdAt": "2025-11-14T00:00:00.000Z",
+    "url": "https://example.com/login",
+    "totalElements": 5,
+    "description": "Example login form automation - demonstrates input, select, and click actions"
+  },
+  "elements": [
+    {
+      "index": 1,
+      "tagName": "input",
+      "type": "email",
+      "id": "email",
+      "name": "email",
+      "className": "form-control",
+      "text": null,
+      "placeholder": "Enter your email",
+      "href": null,
+      "value": null,
+      "xpath": "//*[@id=\"email\"]",
+      "selector": "#email",
+      "enabled": true,
+      "action": {
+        "type": "input",
+        "value": "user@example.com",
+        "waitAfter": 800,
+        "description": "Enter email address"
+      }
+    },
+    {
+      "index": 2,
+      "tagName": "input",
+      "type": "password",
+      "id": "password",
+      "name": "password",
+      "className": "form-control",
+      "text": null,
+      "placeholder": "Enter your password",
+      "href": null,
+      "value": null,
+      "xpath": "//*[@id=\"password\"]",
+      "selector": "#password",
+      "enabled": true,
+      "action": {
+        "type": "input",
+        "value": "MySecurePassword123!",
+        "waitAfter": 800,
+        "description": "Enter password"
+      }
+    },
+    {
+      "index": 3,
+      "tagName": "select",
+      "type": null,
+      "id": "country",
+      "name": "country",
+      "className": "form-select",
+      "text": "Select CountryUSACanadaUKAustralia",
+      "placeholder": null,
+      "href": null,
+      "value": "",
+      "xpath": "//*[@id=\"country\"]",
+      "selector": "#country",
+      "enabled": true,
+      "action": {
+        "type": "select",
+        "value": "USA",
+        "waitAfter": 500,
+        "description": "Select country from dropdown"
+      }
+    },
+    {
+      "index": 4,
+      "tagName": "input",
+      "type": "checkbox",
+      "id": "remember",
+      "name": "remember",
+      "className": "form-check-input",
+      "text": null,
+      "placeholder": null,
+      "href": null,
+      "value": "on",
+      "xpath": "//*[@id=\"remember\"]",
+      "selector": "#remember",
+      "enabled": true,
+      "action": {
+        "type": "click",
+        "value": null,
+        "waitAfter": 500,
+        "description": "Check 'Remember me' checkbox"
+      }
+    },
+    {
+      "index": 5,
+      "tagName": "button",
+      "type": "submit",
+      "id": "loginButton",
+      "name": null,
+      "className": "btn btn-primary",
+      "text": "Sign In",
+      "placeholder": null,
+      "href": null,
+      "value": null,
+      "xpath": "//*[@id=\"loginButton\"]",
+      "selector": "#loginButton",
+      "enabled": true,
+      "action": {
+        "type": "click",
+        "value": null,
+        "waitAfter": 3000,
+        "description": "Click the Sign In button and wait for page load"
+      }
+    },
+    {
+      "index": 6,
+      "tagName": "a",
+      "type": null,
+      "id": "dashboardLink",
+      "name": null,
+      "className": "nav-link",
+      "text": "Go to Dashboard",
+      "placeholder": null,
+      "href": "https://example.com/dashboard",
+      "value": null,
+      "xpath": "//*[@id=\"dashboardLink\"]",
+      "selector": "#dashboardLink",
+      "enabled": false,
+      "action": {
+        "type": "navigate",
+        "value": null,
+        "waitAfter": 2000,
+        "description": "Navigate to dashboard (disabled by default)"
+      }
+    }
+  ]
+}
