@@ -4,17 +4,15 @@
   "version": "2.0.0",
   "description": "Playwright-inspired browser automation: inspect, record, and replay user actions with advanced features",
   "permissions": [
-    "activeTab",
-    "scripting",
-    "downloads",
-    "storage",
-    "tabs",
-    "webNavigation",
-    "debugger",
-    "clipboardWrite"
+    "activeTab",      // Required: Access to currently active tab for element inspection and action playback
+    "scripting",      // Required: Inject content scripts to interact with page elements
+    "downloads",      // Required: Download inspected elements and trace logs as JSON files
+    "storage",        // Required: Store and restore browser storage state (localStorage, sessionStorage)
+    "tabs",           // Required: Query active tab and manage tab operations (open, close, switch)
+    "webNavigation"   // Required: Track page navigation events during action playback
   ],
   "host_permissions": [
-    "<all_urls>"
+    "<all_urls>"      // Required: Allow extension to work on any website for maximum flexibility
   ],
   "action": {
     "default_popup": "popup.html",
