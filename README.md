@@ -4,12 +4,29 @@ A powerful Chrome extension that helps you inspect, record, and automatically re
 
 ## Features
 
+### Core Features
 - **Element Inspection**: Automatically detect all interactive elements on a page (inputs, buttons, links, etc.)
+- **Accessibility Tree Inspection**: Capture ARIA roles, labels, and accessibility properties
 - **Action Recording**: Export element data to a JSON file with comprehensive metadata
 - **Manual Editing**: Edit the JSON file to define specific actions and sequences
 - **Action Playback**: Automatically simulate user interactions with configurable delays
 - **Visual Feedback**: See each action highlighted as it's performed
-- **Flexible Selection**: Multiple element selection strategies (ID, CSS selector, XPath, name attribute)
+- **Flexible Selection**: Multiple element selection strategies (ID, CSS selector, XPath, name attribute, ARIA roles, data attributes)
+
+### Advanced Features (Playwright-Inspired)
+- **Screenshot Capture**: Take screenshots during action playback
+- **Trace Recording**: Export detailed execution logs with timestamps
+- **Storage State Management**: Save and restore browser localStorage/sessionStorage
+- **Tab Management**: Open, close, and switch between browser tabs
+- **Smart Wait Conditions**: Wait for element visibility, text content, or element presence
+- **Advanced Mouse Events**: Click, double-click, right-click, hover, coordinate-based clicks
+- **Advanced Keyboard Events**: Key presses with modifier keys (Ctrl, Alt, Shift)
+- **Drag and Drop**: Simulate drag and drop interactions
+- **File Upload**: Trigger file upload dialogs
+- **Viewport Control**: Scroll to specific positions and elements
+- **Assertions**: Validate element state, text, values, attributes, and classes
+- **Iframe Support**: Interact with elements inside iframes
+- **Focus Management**: Focus and blur elements programmatically
 
 ## Installation
 
@@ -135,7 +152,7 @@ For each element you want to interact with:
 1. Set `"enabled": true`
 2. Configure the `action` object:
 
-**Action Types:**
+**Basic Action Types:**
 
 - **`click`**: Click the element
   ```json
@@ -177,13 +194,207 @@ For each element you want to interact with:
   }
   ```
 
-**Parameters:**
+**Advanced Mouse Actions:**
+
+- **`rightClick`**: Right-click (context menu)
+  ```json
+  "action": {
+    "type": "rightClick",
+    "value": null,
+    "waitAfter": 500
+  }
+  ```
+
+- **`doubleClick`**: Double-click element
+  ```json
+  "action": {
+    "type": "doubleClick",
+    "value": null,
+    "waitAfter": 500
+  }
+  ```
+
+- **`hover`**: Hover over element
+  ```json
+  "action": {
+    "type": "hover",
+    "value": null,
+    "waitAfter": 300
+  }
+  ```
+
+- **`clickAt`**: Click at specific coordinates
+  ```json
+  "action": {
+    "type": "clickAt",
+    "coordinates": { "x": 10, "y": 20 },
+    "waitAfter": 500
+  }
+  ```
+
+- **`dragDrop`**: Drag and drop to target
+  ```json
+  "action": {
+    "type": "dragDrop",
+    "value": "#drop-target",
+    "waitAfter": 1000
+  }
+  ```
+
+**Keyboard Actions:**
+
+- **`keyPress`**: Press a specific key
+  ```json
+  "action": {
+    "type": "keyPress",
+    "value": "Enter",
+    "modifiers": { "ctrlKey": false, "altKey": false, "shiftKey": false },
+    "waitAfter": 500
+  }
+  ```
+
+**Wait Actions:**
+
+- **`waitForElement`**: Wait for element to appear
+  ```json
+  "action": {
+    "type": "waitForElement",
+    "value": "#dynamic-content",
+    "waitAfter": 0
+  }
+  ```
+
+- **`waitForVisible`**: Wait for element to be visible
+  ```json
+  "action": {
+    "type": "waitForVisible",
+    "value": null,
+    "waitAfter": 0
+  }
+  ```
+
+- **`waitForText`**: Wait for specific text content
+  ```json
+  "action": {
+    "type": "waitForText",
+    "value": "Loading complete",
+    "waitAfter": 0
+  }
+  ```
+
+**Assertion Actions:**
+
+- **`assert`**: Validate element state
+  ```json
+  "action": {
+    "type": "assert",
+    "assertType": "text",
+    "expectedValue": "Success",
+    "waitAfter": 0
+  }
+  ```
+
+  Available assertion types:
+  - `exists`: Element exists in DOM
+  - `visible`: Element is visible
+  - `text`: Element contains text
+  - `value`: Input value matches
+  - `attribute`: Attribute value matches (requires `attributeName`)
+  - `class`: Element has CSS class
+
+**Utility Actions:**
+
+- **`screenshot`**: Capture screenshot
+  ```json
+  "action": {
+    "type": "screenshot",
+    "value": null,
+    "waitAfter": 500
+  }
+  ```
+
+- **`scroll`**: Scroll element or to position
+  ```json
+  "action": {
+    "type": "scroll",
+    "value": { "top": 500, "left": 0, "behavior": "smooth" },
+    "waitAfter": 500
+  }
+  ```
+
+- **`focus`**: Focus element
+  ```json
+  "action": {
+    "type": "focus",
+    "value": null,
+    "waitAfter": 200
+  }
+  ```
+
+- **`blur`**: Remove focus from element
+  ```json
+  "action": {
+    "type": "blur",
+    "value": null,
+    "waitAfter": 200
+  }
+  ```
+
+- **`uploadFile`**: Trigger file upload dialog
+  ```json
+  "action": {
+    "type": "uploadFile",
+    "value": null,
+    "waitAfter": 1000
+  }
+  ```
+
+**Tab Management Actions:**
+
+- **`openTab`**: Open new browser tab
+  ```json
+  "action": {
+    "type": "openTab",
+    "value": "https://example.com",
+    "active": true,
+    "waitAfter": 2000
+  }
+  ```
+
+- **`closeTab`**: Close tab by ID
+  ```json
+  "action": {
+    "type": "closeTab",
+    "value": "tab_id",
+    "waitAfter": 500
+  }
+  ```
+
+- **`switchTab`**: Switch to tab by ID
+  ```json
+  "action": {
+    "type": "switchTab",
+    "value": "tab_id",
+    "waitAfter": 500
+  }
+  ```
+
+**Common Parameters:**
 
 - `enabled` (boolean): Whether to execute this action
-- `type` (string): Type of action (click, input, select, navigate)
-- `value` (string): Value for input/select actions (null for click/navigate)
+- `type` (string): Type of action (see above)
+- `value` (varies): Value for the action (type-specific)
 - `waitAfter` (number): Milliseconds to wait after this action
 - `description` (string): Optional description shown during playback
+
+**Advanced Element Selection:**
+
+Elements can also be selected using:
+- `iframe`: Selector for parent iframe
+- `ariaRole`: ARIA role attribute
+- `ariaLabel`: ARIA label attribute
+- `dataAttributes`: Object with data-* attributes
+- `textContent`: Exact text content match
 
 ### Step 4: Upload and Play
 
@@ -204,7 +415,20 @@ The extension uses multiple strategies to find elements, in this order:
 2. **CSS Selector**: Flexible and powerful
 3. **XPath**: Precise location-based
 4. **Name Attribute**: Useful for form fields
-5. **Text Content**: Fallback for buttons/links
+5. **ARIA Role**: Accessibility-based selection
+6. **ARIA Label**: Label-based selection
+7. **Data Attributes**: Custom data attributes
+8. **Text Content**: Fallback for buttons/links
+
+### Accessibility Tree Inspection
+
+Elements are inspected with full accessibility information:
+- ARIA roles and labels
+- Tabindex and focus management
+- Disabled, required, and checked states
+- ARIA relationships (describedby, labelledby)
+
+This enables more robust element selection and better support for accessible web applications.
 
 ### Visual Feedback
 
@@ -218,11 +442,48 @@ During playback:
 
 - **Global Delay**: Set in the popup (100ms - 10000ms)
 - **Per-Action Delay**: Override with `waitAfter` in JSON
+- **Smart Waits**: Use `waitForElement`, `waitForVisible`, `waitForText` for dynamic content
 - Use longer delays for:
   - Page loads after navigation
   - AJAX requests
   - Animations
   - Complex form validation
+
+### Trace Recording
+
+After running actions, export a detailed trace log containing:
+- Timestamp for each action
+- Action type and target
+- Success/failure status
+- Screenshots (if captured)
+- Full execution timeline
+
+Use the "Export Trace Log" button to download the trace as JSON.
+
+### Storage State Management
+
+Save and restore browser state between sessions:
+- **Save Storage State**: Capture current localStorage and sessionStorage
+- **Load Storage State**: Restore previously saved state
+- Useful for maintaining login sessions and user preferences
+
+### Screenshot Capture
+
+Include screenshot actions in your automation:
+- Screenshots are captured and stored in the trace log
+- Useful for visual regression testing
+- Exported with timestamp and action context
+
+### Iframe Support
+
+Interact with elements inside iframes by specifying the iframe selector:
+```json
+{
+  "iframe": "#my-iframe",
+  "selector": "#button-in-iframe",
+  "action": { "type": "click" }
+}
+```
 
 ## Tips & Best Practices
 
@@ -323,10 +584,12 @@ python3 generate_icons.py
 
 ## Limitations
 
-- Cannot interact with `<iframe>` content from different origins
+- Cannot interact with cross-origin iframes (browser security)
 - Cannot bypass browser security restrictions
 - Some complex web apps with heavy JavaScript may need special handling
-- File input fields require manual interaction
+- File upload requires user interaction (browser security requirement)
+- Tab management limited to same browser window
+- Screenshots only capture visible viewport
 
 ## Use Cases
 
@@ -343,20 +606,43 @@ This project is open source. Feel free to modify and distribute.
 
 ## Contributing
 
-Contributions welcome! Areas for improvement:
+Contributions welcome! Areas for further improvement:
 
-- Recording actions in real-time (click-to-record)
-- Export to Puppeteer/Playwright scripts
+- Recording actions in real-time (click-to-record mode)
+- Export to Puppeteer/Playwright test scripts
 - Action library/templates
-- Conditional logic support
+- Conditional logic support (if/then/else)
 - Loop/repeat functionality
-- Screenshot capture at each step
+- Variable substitution
+- Network request monitoring
+- Performance metrics capture
+- Multi-window support
+- Video recording of full sessions
 
 ## Support
 
 For issues, questions, or feature requests, please check the browser console for error messages and ensure your actions file is properly formatted JSON.
 
 ## Version History
+
+### v2.0.0 (2025-11-16) - Playwright MCP Edition
+Major update with Playwright-inspired features:
+- Added 20+ new action types (right-click, double-click, hover, drag-drop, etc.)
+- Implemented accessibility tree inspection with ARIA attributes
+- Added screenshot capture during playback
+- Implemented trace recording and export
+- Added storage state management (save/load localStorage/sessionStorage)
+- Implemented tab management (open, close, switch tabs)
+- Added smart wait conditions (waitForElement, waitForVisible, waitForText)
+- Implemented coordinate-based clicks
+- Added keyboard events with modifier keys
+- Implemented drag and drop support
+- Added assertion actions (validate element state, text, values, attributes)
+- Implemented iframe support
+- Added focus/blur management
+- Enhanced element selection with ARIA roles, labels, and data attributes
+- Added viewport control (scroll)
+- Comprehensive trace export with timestamps and screenshots
 
 ### v1.0.0 (2025-11-14)
 - Initial release
