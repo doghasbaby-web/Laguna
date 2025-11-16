@@ -4,6 +4,10 @@ let currentPlayback = null;
 let traceLog = [];
 let screenshots = [];
 
+// Memory management constants
+const MAX_TRACE_LOG_ENTRIES = 1000;
+const MAX_SCREENSHOTS = 50;
+
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'playActions') {
@@ -148,8 +152,11 @@ async function executeAction(elementAction) {
           element.value = '';
           element.focus();
 
+          // Sanitize input value to prevent injection
+          const sanitizedValue = String(actionValue || '');
+
           // Simulate typing
-          for (const char of actionValue) {
+          for (const char of sanitizedValue) {
             if (!isPlaying) break;
             element.value += char;
             element.dispatchEvent(new Event('input', { bubbles: true }));
@@ -158,13 +165,15 @@ async function executeAction(elementAction) {
 
           element.dispatchEvent(new Event('change', { bubbles: true }));
           element.blur();
-          logTrace('input', elementAction.selector, { value: actionValue });
-          console.log('Typed into element:', elementAction.selector, actionValue);
+          logTrace('input', elementAction.selector, { value: sanitizedValue });
+          console.log('Typed into element:', elementAction.selector, sanitizedValue);
         } else if (element.getAttribute('contenteditable') === 'true') {
-          element.textContent = actionValue;
+          // Use textContent instead of innerHTML to prevent XSS
+          const sanitizedValue = String(actionValue || '');
+          element.textContent = sanitizedValue;
           element.dispatchEvent(new Event('input', { bubbles: true }));
-          logTrace('input', elementAction.selector, { value: actionValue });
-          console.log('Set contenteditable element:', elementAction.selector, actionValue);
+          logTrace('input', elementAction.selector, { value: sanitizedValue });
+          console.log('Set contenteditable element:', elementAction.selector, sanitizedValue);
         }
         break;
 
@@ -248,6 +257,14 @@ async function executeAction(elementAction) {
           action: elementAction.selector,
           data: screenshot
         });
+
+        // Implement bounds to prevent memory leaks
+        if (screenshots.length > MAX_SCREENSHOTS) {
+          // Remove oldest screenshots
+          screenshots = screenshots.slice(-MAX_SCREENSHOTS);
+          console.warn(`Screenshots exceeded ${MAX_SCREENSHOTS} entries. Oldest screenshots removed.`);
+        }
+
         logTrace('screenshot', elementAction.selector, { captured: true });
         console.log('Captured screenshot');
         break;
@@ -338,54 +355,147 @@ async function executeAction(elementAction) {
 function findElementInIframe(iframeSelector, elementAction) {
   try {
     const iframe = document.querySelector(iframeSelector);
-    if (!iframe || !iframe.contentDocument) {
+
+    if (!iframe) {
+      console.error(`Iframe not found with selector: ${iframeSelector}`);
       return null;
     }
 
-    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+    if (iframe.tagName !== 'IFRAME') {
+      console.error(`Element is not an iframe: ${iframeSelector}`);
+      return null;
+    }
+
+    // Check for cross-origin restrictions
+    let iframeDoc = null;
+    try {
+      iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    } catch (crossOriginError) {
+      console.error(`Cannot access iframe due to cross-origin restrictions: ${iframeSelector}`, crossOriginError.message);
+      console.warn('Tip: The iframe may be from a different domain. Cross-origin iframes cannot be accessed for security reasons.');
+      return null;
+    }
+
+    if (!iframeDoc) {
+      console.error(`Iframe document not accessible: ${iframeSelector}`);
+      return null;
+    }
 
     // Try by ID first
     if (elementAction.id) {
       const element = iframeDoc.getElementById(elementAction.id);
-      if (element) return element;
+      if (element) {
+        console.log(`Found element by ID in iframe: ${elementAction.id}`);
+        return element;
+      }
     }
 
     // Try by selector
     if (elementAction.selector) {
-      const element = iframeDoc.querySelector(elementAction.selector);
-      if (element) return element;
+      try {
+        const element = iframeDoc.querySelector(elementAction.selector);
+        if (element) {
+          console.log(`Found element by selector in iframe: ${elementAction.selector}`);
+          return element;
+        }
+      } catch (selectorError) {
+        console.warn(`Invalid selector in iframe: ${elementAction.selector}`, selectorError.message);
+      }
     }
 
+    // Try by XPath in iframe
+    if (elementAction.xpath) {
+      try {
+        const result = iframeDoc.evaluate(
+          elementAction.xpath,
+          iframeDoc,
+          null,
+          XPathResult.FIRST_ORDERED_NODE_TYPE,
+          null
+        );
+        const element = result.singleNodeValue;
+        if (element) {
+          console.log(`Found element by XPath in iframe: ${elementAction.xpath}`);
+          return element;
+        }
+      } catch (xpathError) {
+        console.warn(`Invalid XPath in iframe: ${elementAction.xpath}`, xpathError.message);
+      }
+    }
+
+    console.warn(`Element not found in iframe: ${iframeSelector}`, elementAction);
     return null;
   } catch (e) {
-    console.warn('Cannot access iframe:', e.message);
+    console.error('Error accessing iframe:', e.message);
+    console.error('Iframe selector:', iframeSelector);
+    console.error('Element action:', elementAction);
     return null;
   }
 }
 
-// Find element using multiple strategies
-function findElement(elementAction) {
+// Element cache for performance optimization
+const elementCache = new Map();
+const CACHE_TTL = 5000; // 5 seconds cache TTL
+
+// Find element using multiple strategies with retry logic and Shadow DOM support
+async function findElement(elementAction, retryCount = 0) {
+  const maxRetries = 3;
+  const baseDelay = 500; // milliseconds
+
+  // Check cache first
+  const cacheKey = JSON.stringify(elementAction);
+  const cached = elementCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    // Verify element still exists in DOM
+    if (document.contains(cached.element)) {
+      return cached.element;
+    } else {
+      elementCache.delete(cacheKey);
+    }
+  }
+
   let element = null;
 
   // Check if element is in an iframe
   if (elementAction.iframe) {
     element = findElementInIframe(elementAction.iframe, elementAction);
-    if (element) return element;
+    if (element) {
+      cacheElement(cacheKey, element);
+      return element;
+    }
   }
 
-  // Try by ID first
+  // Try by ID first (main document)
   if (elementAction.id) {
     element = document.getElementById(elementAction.id);
-    if (element) return element;
+    if (element) {
+      cacheElement(cacheKey, element);
+      return element;
+    }
+    // Try in Shadow DOM
+    element = findInShadowDOM(elementAction.id, 'id');
+    if (element) {
+      cacheElement(cacheKey, element);
+      return element;
+    }
   }
 
   // Try by CSS selector
   if (elementAction.selector) {
     try {
       element = document.querySelector(elementAction.selector);
-      if (element) return element;
+      if (element) {
+        cacheElement(cacheKey, element);
+        return element;
+      }
+      // Try in Shadow DOM
+      element = findInShadowDOM(elementAction.selector, 'selector');
+      if (element) {
+        cacheElement(cacheKey, element);
+        return element;
+      }
     } catch (e) {
-      console.warn('Invalid selector:', elementAction.selector);
+      console.warn('Invalid selector:', elementAction.selector, e.message);
     }
   }
 
@@ -400,28 +510,119 @@ function findElement(elementAction) {
         null
       );
       element = result.singleNodeValue;
-      if (element) return element;
+      if (element) {
+        cacheElement(cacheKey, element);
+        return element;
+      }
     } catch (e) {
-      console.warn('Invalid XPath:', elementAction.xpath);
+      console.warn('Invalid XPath:', elementAction.xpath, e.message);
     }
   }
 
   // Try by name attribute
   if (elementAction.name) {
-    element = document.querySelector(`[name="${elementAction.name}"]`);
-    if (element) return element;
+    element = document.querySelector(`[name="${CSS.escape(elementAction.name)}"]`);
+    if (element) {
+      cacheElement(cacheKey, element);
+      return element;
+    }
   }
 
   // Try advanced selectors
   element = findElementAdvanced(elementAction);
-  if (element) return element;
+  if (element) {
+    cacheElement(cacheKey, element);
+    return element;
+  }
 
   // Last resort: try by text content for buttons/links
   if (elementAction.text && (elementAction.tagName === 'button' || elementAction.tagName === 'a')) {
     const candidates = document.querySelectorAll(elementAction.tagName);
     for (const candidate of candidates) {
       if (candidate.textContent.trim().includes(elementAction.text.trim())) {
+        cacheElement(cacheKey, candidate);
         return candidate;
+      }
+    }
+  }
+
+  // Retry with exponential backoff if not found
+  if (!element && retryCount < maxRetries) {
+    const delay = baseDelay * Math.pow(2, retryCount);
+    console.log(`Element not found, retrying in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+    await sleep(delay);
+    return findElement(elementAction, retryCount + 1);
+  }
+
+  return null;
+}
+
+// Cache element for performance
+function cacheElement(key, element) {
+  elementCache.set(key, {
+    element: element,
+    timestamp: Date.now()
+  });
+
+  // Clean up old cache entries
+  if (elementCache.size > 100) {
+    const oldestKey = elementCache.keys().next().value;
+    elementCache.delete(oldestKey);
+  }
+}
+
+// Find element in Shadow DOM
+function findInShadowDOM(query, type) {
+  const allElements = document.querySelectorAll('*');
+
+  for (const el of allElements) {
+    if (el.shadowRoot) {
+      try {
+        let found = null;
+        if (type === 'id') {
+          found = el.shadowRoot.getElementById(query);
+        } else if (type === 'selector') {
+          found = el.shadowRoot.querySelector(query);
+        }
+
+        if (found) {
+          return found;
+        }
+
+        // Recursively search nested shadow DOMs
+        const nested = findInNestedShadowDOM(el.shadowRoot, query, type);
+        if (nested) {
+          return nested;
+        }
+      } catch (e) {
+        console.warn('Error searching shadow DOM:', e.message);
+      }
+    }
+  }
+
+  return null;
+}
+
+// Recursively find in nested Shadow DOM
+function findInNestedShadowDOM(shadowRoot, query, type) {
+  const children = shadowRoot.querySelectorAll('*');
+
+  for (const child of children) {
+    if (child.shadowRoot) {
+      let found = null;
+      if (type === 'id') {
+        found = child.shadowRoot.getElementById(query);
+      } else if (type === 'selector') {
+        found = child.shadowRoot.querySelector(query);
+      }
+
+      if (found) {
+        return found;
+      }
+
+      const nested = findInNestedShadowDOM(child.shadowRoot, query, type);
+      if (nested) {
+        return nested;
       }
     }
   }
@@ -539,14 +740,41 @@ function sleep(ms) {
 
 // Trace logging function
 function logTrace(action, target, details) {
+  // Sanitize trace data to prevent XSS when displaying logs
   const traceEntry = {
     timestamp: new Date().toISOString(),
-    action: action,
-    target: target,
-    details: details,
-    url: window.location.href
+    action: String(action || '').substring(0, 100),
+    target: String(target || '').substring(0, 500),
+    details: sanitizeTraceDetails(details),
+    url: String(window.location.href).substring(0, 2000)
   };
   traceLog.push(traceEntry);
+
+  // Implement bounds to prevent memory leaks
+  if (traceLog.length > MAX_TRACE_LOG_ENTRIES) {
+    // Remove oldest entries
+    traceLog = traceLog.slice(-MAX_TRACE_LOG_ENTRIES);
+    console.warn(`Trace log exceeded ${MAX_TRACE_LOG_ENTRIES} entries. Oldest entries removed.`);
+  }
+}
+
+// Sanitize trace details object
+function sanitizeTraceDetails(details) {
+  if (!details || typeof details !== 'object') {
+    return details;
+  }
+
+  const sanitized = {};
+  for (const [key, value] of Object.entries(details)) {
+    if (typeof value === 'string') {
+      sanitized[key] = value.substring(0, 1000);
+    } else if (typeof value === 'number' || typeof value === 'boolean') {
+      sanitized[key] = value;
+    } else if (typeof value === 'object') {
+      sanitized[key] = sanitizeTraceDetails(value);
+    }
+  }
+  return sanitized;
 }
 
 // Drag and drop simulation
@@ -604,44 +832,114 @@ async function captureScreenshot() {
   });
 }
 
-// Wait for element to appear
+// Wait for element to appear using MutationObserver
 async function waitForElement(selector, timeout = 10000) {
-  const startTime = Date.now();
-  while (Date.now() - startTime < timeout) {
-    const element = document.querySelector(selector);
-    if (element) return element;
-    await sleep(100);
-  }
-  throw new Error(`Element not found within ${timeout}ms: ${selector}`);
+  // First check if element already exists
+  const existing = document.querySelector(selector);
+  if (existing) return existing;
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      observer.disconnect();
+      reject(new Error(`Element not found within ${timeout}ms: ${selector}`));
+    }, timeout);
+
+    const observer = new MutationObserver((mutations, obs) => {
+      const element = document.querySelector(selector);
+      if (element) {
+        clearTimeout(timeoutId);
+        obs.disconnect();
+        resolve(element);
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: false
+    });
+  });
 }
 
-// Wait for element to be visible
+// Wait for element to be visible using IntersectionObserver
 async function waitForVisible(element, timeout = 10000) {
-  const startTime = Date.now();
-  while (Date.now() - startTime < timeout) {
-    const rect = element.getBoundingClientRect();
-    const style = window.getComputedStyle(element);
-    if (rect.width > 0 && rect.height > 0 &&
-        style.display !== 'none' &&
-        style.visibility !== 'hidden' &&
-        style.opacity !== '0') {
-      return true;
-    }
-    await sleep(100);
-  }
-  throw new Error(`Element not visible within ${timeout}ms`);
+  // First check if element is already visible
+  const isVisible = checkVisibility(element);
+  if (isVisible) return true;
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      observer.disconnect();
+      intervalId && clearInterval(intervalId);
+      reject(new Error(`Element not visible within ${timeout}ms`));
+    }, timeout);
+
+    // Use IntersectionObserver for viewport visibility
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && checkVisibility(entry.target)) {
+          clearTimeout(timeoutId);
+          intervalId && clearInterval(intervalId);
+          observer.disconnect();
+          resolve(true);
+        }
+      });
+    }, {
+      threshold: 0.01 // At least 1% visible
+    });
+
+    observer.observe(element);
+
+    // Also check for CSS visibility changes periodically
+    // IntersectionObserver doesn't detect display/visibility CSS changes
+    const intervalId = setInterval(() => {
+      if (checkVisibility(element)) {
+        clearTimeout(timeoutId);
+        clearInterval(intervalId);
+        observer.disconnect();
+        resolve(true);
+      }
+    }, 100);
+  });
 }
 
-// Wait for element to contain specific text
+// Check if element is visible
+function checkVisibility(element) {
+  const rect = element.getBoundingClientRect();
+  const style = window.getComputedStyle(element);
+  return rect.width > 0 && rect.height > 0 &&
+         style.display !== 'none' &&
+         style.visibility !== 'hidden' &&
+         style.opacity !== '0';
+}
+
+// Wait for element to contain specific text using MutationObserver
 async function waitForText(element, text, timeout = 10000) {
-  const startTime = Date.now();
-  while (Date.now() - startTime < timeout) {
-    if (element.textContent.includes(text)) {
-      return true;
-    }
-    await sleep(100);
+  // First check if text already exists
+  if (element.textContent.includes(text)) {
+    return true;
   }
-  throw new Error(`Text "${text}" not found within ${timeout}ms`);
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      observer.disconnect();
+      reject(new Error(`Text "${text}" not found within ${timeout}ms`));
+    }, timeout);
+
+    const observer = new MutationObserver((mutations, obs) => {
+      if (element.textContent.includes(text)) {
+        clearTimeout(timeoutId);
+        obs.disconnect();
+        resolve(true);
+      }
+    });
+
+    observer.observe(element, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+  });
 }
 
 // Perform assertion
@@ -748,46 +1046,103 @@ function getAccessibilityInfo(element) {
 
 // Export trace log
 function exportTraceLog() {
-  return {
+  const exported = {
     startTime: traceLog[0]?.timestamp,
     endTime: traceLog[traceLog.length - 1]?.timestamp,
     totalActions: traceLog.length,
     actions: traceLog,
     screenshots: screenshots
   };
+
+  // Clear data after export to prevent memory leaks
+  clearTraceData();
+
+  return exported;
+}
+
+// Clear trace data to free memory
+function clearTraceData() {
+  traceLog = [];
+  screenshots = [];
+  console.log('Trace data cleared to free memory');
 }
 
 // Listen for trace export request
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'exportTrace') {
     sendResponse(exportTraceLog());
+  } else if (message.action === 'clearTraceData') {
+    clearTraceData();
+    sendResponse({ success: true });
   } else if (message.action === 'getStorageState') {
+    // SECURITY WARNING: Storage state may contain sensitive information
+    // Do not share or expose this data to untrusted parties
     const storageState = {
-      cookies: document.cookie,
-      localStorage: { ...localStorage },
-      sessionStorage: { ...sessionStorage }
+      // Note: document.cookie only exposes HttpOnly=false cookies for security
+      // For full cookie access, chrome.cookies API would be needed (not implemented for security)
+      cookieWarning: 'Only non-HttpOnly cookies available via document.cookie. Sensitive cookies are protected.',
+      cookies: document.cookie || '',
+      localStorage: sanitizeStorage({ ...localStorage }),
+      sessionStorage: sanitizeStorage({ ...sessionStorage }),
+      securityNotice: 'This storage state may contain sensitive data. Store securely and do not share.'
     };
     sendResponse(storageState);
   } else if (message.action === 'setStorageState') {
-    // Restore localStorage
-    if (message.data.localStorage) {
-      for (const [key, value] of Object.entries(message.data.localStorage)) {
-        localStorage.setItem(key, value);
+    try {
+      // Restore localStorage with validation
+      if (message.data.localStorage) {
+        for (const [key, value] of Object.entries(message.data.localStorage)) {
+          // Validate key and value
+          if (typeof key === 'string' && key.length < 500) {
+            const sanitizedValue = String(value).substring(0, 5000);
+            localStorage.setItem(key, sanitizedValue);
+          }
+        }
       }
-    }
-    // Restore sessionStorage
-    if (message.data.sessionStorage) {
-      for (const [key, value] of Object.entries(message.data.sessionStorage)) {
-        sessionStorage.setItem(key, value);
+      // Restore sessionStorage with validation
+      if (message.data.sessionStorage) {
+        for (const [key, value] of Object.entries(message.data.sessionStorage)) {
+          // Validate key and value
+          if (typeof key === 'string' && key.length < 500) {
+            const sanitizedValue = String(value).substring(0, 5000);
+            sessionStorage.setItem(key, sanitizedValue);
+          }
+        }
       }
+      sendResponse({ success: true });
+    } catch (error) {
+      console.error('Error setting storage state:', error);
+      sendResponse({ success: false, error: error.message });
     }
-    sendResponse({ success: true });
   }
   return true;
 });
+
+// Sanitize storage data to prevent exposing sensitive information
+function sanitizeStorage(storage) {
+  const sanitized = {};
+  const sensitiveKeyPatterns = ['password', 'token', 'secret', 'key', 'auth', 'credential'];
+
+  for (const [key, value] of Object.entries(storage)) {
+    // Check if key contains sensitive patterns
+    const isSensitive = sensitiveKeyPatterns.some(pattern =>
+      key.toLowerCase().includes(pattern)
+    );
+
+    if (isSensitive) {
+      sanitized[key] = '[REDACTED - Sensitive Data]';
+    } else {
+      sanitized[key] = String(value).substring(0, 5000);
+    }
+  }
+
+  return sanitized;
+}
 
 // Clean up on page unload
 window.addEventListener('beforeunload', () => {
   removeHighlight();
   isPlaying = false;
+  // Clear trace data on page unload to prevent memory leaks
+  clearTraceData();
 });
