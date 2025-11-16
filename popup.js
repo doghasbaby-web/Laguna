@@ -85,7 +85,16 @@ function inspectPageElements() {
       href: el.href || null,
       value: el.value || null,
       xpath: getXPath(el),
-      selector: generateSelector(el)
+      selector: generateSelector(el),
+      accessibility: {
+        role: el.getAttribute('role') || el.tagName.toLowerCase(),
+        ariaLabel: el.getAttribute('aria-label') || null,
+        ariaDescribedBy: el.getAttribute('aria-describedby') || null,
+        ariaLabelledBy: el.getAttribute('aria-labelledby') || null,
+        tabIndex: el.tabIndex,
+        disabled: el.disabled || el.getAttribute('aria-disabled') === 'true',
+        required: el.required || el.getAttribute('aria-required') === 'true'
+      }
     };
 
     elements.push(element);
@@ -256,6 +265,85 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.status === 'success' || message.status === 'error') {
       playBtn.disabled = false;
       stopBtn.disabled = true;
+    }
+  }
+});
+
+// Export trace log
+const exportTraceBtn = document.getElementById('exportTraceBtn');
+exportTraceBtn.addEventListener('click', async () => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    const response = await chrome.tabs.sendMessage(tab.id, { action: 'exportTrace' });
+
+    if (response && response.totalActions > 0) {
+      // Save trace log using background script
+      chrome.runtime.sendMessage({
+        type: 'saveTraceLog',
+        data: response
+      }, (result) => {
+        if (result.success) {
+          showStatus(`Exported trace with ${response.totalActions} actions!`, 'success');
+        }
+      });
+    } else {
+      showStatus('No trace log available. Run actions first.', 'error');
+    }
+  } catch (error) {
+    showStatus(`Error exporting trace: ${error.message}`, 'error');
+  }
+});
+
+// Save storage state
+const saveStorageBtn = document.getElementById('saveStorageBtn');
+saveStorageBtn.addEventListener('click', async () => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    const storageState = await chrome.tabs.sendMessage(tab.id, { action: 'getStorageState' });
+
+    chrome.runtime.sendMessage({
+      type: 'saveStorageState',
+      data: storageState
+    }, (result) => {
+      if (result.success) {
+        showStatus('Storage state saved successfully!', 'success');
+      }
+    });
+  } catch (error) {
+    showStatus(`Error saving storage: ${error.message}`, 'error');
+  }
+});
+
+// Load storage state
+const loadStorageBtn = document.getElementById('loadStorageBtn');
+loadStorageBtn.addEventListener('click', async () => {
+  try {
+    chrome.runtime.sendMessage({ type: 'loadStorageState' }, async (result) => {
+      if (result.data) {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+        await chrome.tabs.sendMessage(tab.id, {
+          action: 'setStorageState',
+          data: result.data
+        });
+
+        showStatus('Storage state loaded successfully!', 'success');
+      } else {
+        showStatus('No saved storage state found.', 'error');
+      }
+    });
+  } catch (error) {
+    showStatus(`Error loading storage: ${error.message}`, 'error');
+  }
+});
+
+// Enable trace export button after playback
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'playbackStatus') {
+    if (message.status === 'success') {
+      exportTraceBtn.disabled = false;
     }
   }
 });
